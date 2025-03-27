@@ -6,12 +6,17 @@ from pydantic import BaseModel
 from PIL import Image
 import numpy as np
 
+# Import snapshot_download to pin model version and set a cache directory.
+from huggingface_hub import snapshot_download
+
 from optimum.intel.openvino import OVModelForVisualCausalLM
 from transformers import AutoProcessor, TextStreamer
 
 # Import external configuration.
 from config import (
     MODEL_ID,
+    MODEL_REVISION,
+    CACHE_DIR,
     GENERATION_ARGS,
     SERVER_HOST,
     SERVER_PORT,
@@ -20,6 +25,9 @@ from config import (
     NORMALIZE_IMAGE,
 )
 
+# Download the model snapshot once (if not already in CACHE_DIR)
+model_dir = snapshot_download(repo_id=MODEL_ID, revision=MODEL_REVISION, cache_dir=CACHE_DIR)
+
 app = FastAPI()
 
 # For JSON-based requests.
@@ -27,34 +35,29 @@ class InferenceRequest(BaseModel):
     b64_image: str = None
     prompt: str = None
 
-# Initialize the processor and the model using the configuration.
-processor = AutoProcessor.from_pretrained(MODEL_ID, trust_remote_code=True)
-ov_model = OVModelForVisualCausalLM.from_pretrained(MODEL_ID, trust_remote_code=True)
+# Load the processor and model from the downloaded directory.
+processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
+ov_model = OVModelForVisualCausalLM.from_pretrained(model_dir, trust_remote_code=True)
 
 def optimized_preprocess_image(image: Image.Image, max_size: int = MAX_IMAGE_SIZE, normalize: bool = NORMALIZE_IMAGE) -> Image.Image:
     """
     Optimize image preprocessing by:
-      - Converting to RGB,
-      - Resizing the image if its largest dimension exceeds max_size,
-      - Optionally normalizing pixel values to [0,1].
-    
-    Returns a PIL image (normalization is applied to a numpy array if needed).
+      - Converting to RGB.
+      - Resizing if the largest dimension exceeds max_size.
+      - Optionally normalizing pixel values to [0, 1].
     """
-    # Convert image to RGB.
     image = image.convert("RGB")
     
-    # Resize image if larger than max_size.
+    # Resize image if necessary.
     if max(image.size) > max_size:
         ratio = max_size / max(image.size)
         new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
         image = image.resize(new_size, Image.LANCZOS)
     
-    # Optional normalization: convert to numpy array and scale pixel values.
+    # Optionally normalize: if your model's processor handles normalization, you may skip this.
     if normalize:
         image_array = np.array(image, dtype=np.float32) / 255.0
-        # If your model's preprocessor expects a PIL image, you might want to convert back.
-        # Here, we'll assume the processor accepts normalized arrays.
-        # Otherwise, comment out the next line if the processor does its own normalization.
+        # Convert back to PIL image if necessary.
         image = Image.fromarray((image_array * 255).astype(np.uint8))
     
     return image
@@ -70,7 +73,6 @@ async def infer_image(request: Request):
     prompt = None
 
     if "multipart/form-data" in content_type:
-        # Handle multipart/form-data: file upload or base64 string provided as form fields.
         form = await request.form()
         file = form.get("file")
         prompt = form.get("prompt")
@@ -92,7 +94,6 @@ async def infer_image(request: Request):
             raise HTTPException(status_code=400, detail="No image provided in form data.")
             
     elif "application/json" in content_type:
-        # Handle JSON payload.
         try:
             json_body = await request.json()
         except Exception as e:
@@ -113,23 +114,22 @@ async def infer_image(request: Request):
     if image is None:
         raise HTTPException(status_code=400, detail="No image provided.")
 
-    # Optimize the image before processing.
+    # Optimize image preprocessing.
     image = optimized_preprocess_image(image)
 
-    # Use the provided prompt or fall back to the default prompt from the config.
     if prompt is None:
         prompt = DEFAULT_PROMPT
 
     # Preprocess inputs for the vision-language model.
     inputs = ov_model.preprocess_inputs(text=prompt, image=image, processor=processor)
 
-    # Set generation arguments from config, and add streamer.
+    # Set generation arguments (adding streamer).
     generation_args = {
         **GENERATION_ARGS,
         "streamer": TextStreamer(processor.tokenizer, skip_prompt=True, skip_special_tokens=True)
     }
 
-    # Generate response.
+    # Generate model output.
     generate_ids = ov_model.generate(**inputs, eos_token_id=processor.tokenizer.eos_token_id, **generation_args)
     generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
     response_text = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]

@@ -8,9 +8,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y git wget
 
 # Create the model directory and download the model artifacts
-RUN mkdir -p model && \
-    wget https://huggingface.co/OpenVINO/Phi-3.5-vision-instruct-int8-ov/resolve/main/openvino_language_model.xml -O model/openvino_language_model.xml && \
-    wget https://huggingface.co/OpenVINO/Phi-3.5-vision-instruct-int8-ov/resolve/main/openvino_language_model.bin -O model/openvino_language_model.bin
+RUN mkdir -p model
 
 # Copy the application code and configuration files
 COPY app.py config.py requirements.txt /app/
