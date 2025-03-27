@@ -4,5 +4,12 @@ pillow<=11.0
 pydantic
 torchvision
 python-multipart
-# pip install --pre -U --extra-index-url https://storage.openvinotoolkit.org/simple/wheels/pre-release openvino_tokenizers openvino
-# pip install git+https://github.com/huggingface/optimum-intel.git
+
+# The following libraries are necessary:
+--pre
+--extra-index-url https://storage.openvinotoolkit.org/simple/wheels/pre-release
+openvino_tokenizers
+openvino
+
+# Install the optimum-intel package from GitHub:
+git+https://github.com/huggingface/optimum-intel.git#egg=optimum-intel

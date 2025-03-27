@@ -1,0 +1,12 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+request_log.txt
+README.md
+LICENSE.md
+terraform/
+setup.sh
+deployment.yaml
