@@ -4,9 +4,21 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from PIL import Image
+import numpy as np
 
 from optimum.intel.openvino import OVModelForVisualCausalLM
 from transformers import AutoProcessor, TextStreamer
+
+# Import external configuration.
+from config import (
+    MODEL_ID,
+    GENERATION_ARGS,
+    SERVER_HOST,
+    SERVER_PORT,
+    DEFAULT_PROMPT,
+    MAX_IMAGE_SIZE,
+    NORMALIZE_IMAGE,
+)
 
 app = FastAPI()
 
@@ -15,9 +27,37 @@ class InferenceRequest(BaseModel):
     b64_image: str = None
     prompt: str = None
 
-model_id = "OpenVINO/Phi-3.5-vision-instruct-int4-ov"
-processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-ov_model = OVModelForVisualCausalLM.from_pretrained(model_id, trust_remote_code=True)
+# Initialize the processor and the model using the configuration.
+processor = AutoProcessor.from_pretrained(MODEL_ID, trust_remote_code=True)
+ov_model = OVModelForVisualCausalLM.from_pretrained(MODEL_ID, trust_remote_code=True)
+
+def optimized_preprocess_image(image: Image.Image, max_size: int = MAX_IMAGE_SIZE, normalize: bool = NORMALIZE_IMAGE) -> Image.Image:
+    """
+    Optimize image preprocessing by:
+      - Converting to RGB,
+      - Resizing the image if its largest dimension exceeds max_size,
+      - Optionally normalizing pixel values to [0,1].
+    
+    Returns a PIL image (normalization is applied to a numpy array if needed).
+    """
+    # Convert image to RGB.
+    image = image.convert("RGB")
+    
+    # Resize image if larger than max_size.
+    if max(image.size) > max_size:
+        ratio = max_size / max(image.size)
+        new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
+        image = image.resize(new_size, Image.LANCZOS)
+    
+    # Optional normalization: convert to numpy array and scale pixel values.
+    if normalize:
+        image_array = np.array(image, dtype=np.float32) / 255.0
+        # If your model's preprocessor expects a PIL image, you might want to convert back.
+        # Here, we'll assume the processor accepts normalized arrays.
+        # Otherwise, comment out the next line if the processor does its own normalization.
+        image = Image.fromarray((image_array * 255).astype(np.uint8))
+    
+    return image
 
 @app.get("/")
 def root():
@@ -73,16 +113,19 @@ async def infer_image(request: Request):
     if image is None:
         raise HTTPException(status_code=400, detail="No image provided.")
 
-    # Use a default prompt if none is provided.
-    if prompt is None:
-        prompt = "<|image_1|>\nWhat is unusual on this picture?"
+    # Optimize the image before processing.
+    image = optimized_preprocess_image(image)
 
-    # Preprocess inputs for the model.
+    # Use the provided prompt or fall back to the default prompt from the config.
+    if prompt is None:
+        prompt = DEFAULT_PROMPT
+
+    # Preprocess inputs for the vision-language model.
     inputs = ov_model.preprocess_inputs(text=prompt, image=image, processor=processor)
-    generation_args = { 
-        "max_new_tokens": 50, 
-        "temperature": 0.0, 
-        "do_sample": False,
+
+    # Set generation arguments from config, and add streamer.
+    generation_args = {
+        **GENERATION_ARGS,
         "streamer": TextStreamer(processor.tokenizer, skip_prompt=True, skip_special_tokens=True)
     }
 
@@ -95,4 +138,4 @@ async def infer_image(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)

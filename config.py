@@ -16,3 +16,7 @@ SERVER_PORT = 8000
 
 # Default prompt if none is provided
 DEFAULT_PROMPT = "<|image_1|>\nWhat is unusual on this picture?"
+
+# Preprocessing configuration
+MAX_IMAGE_SIZE = 420 # Maximum size (width or height) for the image
+NORMALIZE_IMAGE = True  # Whether to normalize image pixel values to [0, 1]
