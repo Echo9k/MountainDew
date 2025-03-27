@@ -1,6 +1,8 @@
-fastapi==0.95.2
-uvicorn==0.22.0
-pillow==9.5.0
-openvino==2023.0
-openvino-dev==2023.0
-pydantic==1.10.7
+fastapi
+uvicorn
+pillow<=11.0
+pydantic
+torchvision
+python-multipart
+# pip install --pre -U --extra-index-url https://storage.openvinotoolkit.org/simple/wheels/pre-release openvino_tokenizers openvino
+# pip install git+https://github.com/huggingface/optimum-intel.git

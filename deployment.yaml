@@ -15,6 +15,6 @@ spec:
     spec:
       containers:
       - name: phi-3.5
-        image: <your-docker-registry-url>/phi-3.5-app:latest
+        image: Echo9k/phi-3.5-app:latest
         ports:
         - containerPort: 80
