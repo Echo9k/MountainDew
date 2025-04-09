@@ -138,4 +138,4 @@ async def infer_image(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)
+    uvicorn.run("app:app", host=SERVER_HOST, port=SERVER_PORT)

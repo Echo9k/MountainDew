@@ -17,4 +17,4 @@ spec:
       - name: phi-3.5
         image: Echo9k/phi-3.5-app:latest
         ports:
-        - containerPort: 80
+        - containerPort: 8080

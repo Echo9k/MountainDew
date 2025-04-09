@@ -14,7 +14,7 @@ GENERATION_ARGS = {
 
 # Server configuration
 SERVER_HOST = "0.0.0.0"
-SERVER_PORT = 8000
+SERVER_PORT = 8080
 
 # Default prompt if none is provided
 DEFAULT_PROMPT = "<|image_1|>\nWhat is the main shape in this picture? [single world if possible]"
